@@ -25,15 +25,26 @@ void dump(const char* s)
 	}
 	
 	// test cp iterator on char* with unknown length
+	std::vector<int> cp1;
 	printf("== ");
 	for (auto cp : utfz::cp(s))
+	{
+		cp1.push_back(cp);
 		printf("%02x ", cp);
+	}
 	
 	// test cp iterator on std::string (ie known length)
 	printf("== ");
+	std::vector<int> cp2;
 	std::string sz = s;
 	for (auto cp : utfz::cp(sz))
+	{
+		cp2.push_back(cp);
 		printf("%02x ", cp);
+	}
+	assert(cp1.size() == cp2.size());
+	for (size_t i = 0; i < cp1.size(); i++)
+		assert(cp1[i] == cp2[i]);
 	printf("\n");
 }
 

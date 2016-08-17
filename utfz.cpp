@@ -283,7 +283,11 @@ void cp::iter::increment()
 		else
 		{
 			if (!is_check)
+			{
 				S += len;
+				if (S[0] == 0)
+					S = End;
+			}
 		}
 	}
 }
