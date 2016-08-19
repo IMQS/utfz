@@ -27,6 +27,14 @@ enum code
 	invalid = -1,
 };
 
+enum limits
+{
+	max1 = 0x7f,     // maximum code point that can be represented by one byte
+	max2 = 0x7ff,    // maximum code point that can be represented by two bytes
+	max3 = 0xffff,   // maximum code point that can be represented by three bytes
+	max4 = 0x10ffff, // maximum code point that can be represented by four bytes
+};
+
 // Returns the sequence length (1,2,3,4) or 'invalid' if not a valid leading byte.
 // Returns 1 for the NUL character (i.e. c = 0)
 int seq_len(char c);
@@ -98,9 +106,9 @@ public:
 		iter& operator++(int);
 
 		int operator*() const;
-	
+
 	private:
-		template<bool is_check>
+		template <bool is_check>
 		void increment();
 
 		void check_first();
@@ -109,7 +117,6 @@ public:
 
 	iter begin() { return iter(Str, End); }
 	iter end() { return iter(End, End); }
-
 	iter cbegin() const { return iter(Str, End); }
 	iter cend() const { return iter(End, End); }
 };

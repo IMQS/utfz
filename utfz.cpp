@@ -4,7 +4,26 @@
 
 namespace utfz {
 
-template<bool Modified>
+enum
+{
+	min_cp_2             = 0x80,    // minimum code point that is allowed to be encoded with 2 bytes
+	min_cp_3             = 0x800,   // minimum code point that is allowed to be encoded with 3 bytes
+	min_cp_4             = 0x10000, // minimum code point that is allowed to be encoded with 4 bytes
+	utf16_surrogate_low  = 0xd800,
+	utf16_surrogate_high = 0xdfff,
+};
+
+// Index from the high 5 bits of the first byte in a sequence to the length of the sequence
+const int8_t seq_len_table[32] = {
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, //  0..15 (00000..01111)
+    -1, -1, -1, -1, -1, -1, -1, -1,                 // 16..23 (10000..10111) - 10... is only legal as prefixes for continuation bytes
+    2, 2, 2, 2,                                     // 24..27 (11000..11011)
+    3, 3,                                           // 28..29 (11100..11101)
+    4,                                              // 30     (11110)
+    -1,                                             // 31     (11111)
+};
+
+template <bool Modified>
 int T_seq_len(char c)
 {
 	if (Modified)
@@ -15,6 +34,12 @@ int T_seq_len(char c)
 			return 0;
 	}
 
+	// Lookup table is 0.92x the speed of the branches down below - i7 2600K.
+	uint8_t high5 = ((uint8_t) c) >> 3;
+	int8_t  len   = seq_len_table[high5];
+	return len;
+
+	/*
 	if ((c & 0x80) == 0)
 		return 1;
 
@@ -26,6 +51,7 @@ int T_seq_len(char c)
 
 	if ((c & 0xf8) == 0xf0)
 		return 4;
+	*/
 
 	return invalid;
 }
@@ -63,12 +89,21 @@ int decode(const char* s, const char* end, int& _seq_len)
 		break;
 	case 2:
 		cp = ((s[0] & 0x1f) << 6) | (s[1] & 0x3f);
+		// tolerate the zero character here, to support Modified UTF-8.
+		if (cp < min_cp_2 && cp != 0)
+			return invalid;
 		break;
 	case 3:
 		cp = ((s[0] & 0xf) << 12) | ((s[1] & 0x3f) << 6) | (s[2] & 0x3f);
+		if (cp < min_cp_3)
+			return invalid;
+		if (cp >= utf16_surrogate_low && cp <= utf16_surrogate_high)
+			return invalid;
 		break;
 	case 4:
 		cp = ((s[0] & 0x7) << 18) | ((s[1] & 0x3f) << 12) | ((s[2] & 0x3f) << 6) | (s[3] & 0x3f);
+		if (cp < min_cp_4)
+			return invalid;
 		break;
 	}
 	_seq_len = slen;
@@ -97,16 +132,23 @@ int decode(const char* s, int& _seq_len)
 		if (s[1] == 0)
 			return invalid;
 		cp = ((s[0] & 0x1f) << 6) | (s[1] & 0x3f);
+		// tolerate the zero character here, to support Modified UTF-8.
+		if (cp < min_cp_2 && cp != 0)
+			return invalid;
 		break;
 	case 3:
 		if (s[1] == 0 || s[2] == 0)
 			return invalid;
 		cp = ((s[0] & 0xf) << 12) | ((s[1] & 0x3f) << 6) | (s[2] & 0x3f);
+		if (cp < min_cp_3)
+			return invalid;
 		break;
 	case 4:
 		if (s[1] == 0 || s[2] == 0 || s[3] == 0)
 			return invalid;
 		cp = ((s[0] & 0x7) << 18) | ((s[1] & 0x3f) << 12) | ((s[2] & 0x3f) << 6) | (s[3] & 0x3f);
+		if (cp < min_cp_4)
+			return invalid;
 		break;
 	}
 	_seq_len = slen;
@@ -176,7 +218,7 @@ int encode(char* buf, int cp)
 bool encode(std::string& s, int cp)
 {
 	char buf[4];
-	int len = encode(buf, cp);
+	int  len = encode(buf, cp);
 	if (len == 0)
 		return false;
 	switch (len)
@@ -224,7 +266,7 @@ cp::cp(const std::string& s)
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
 cp::iter::iter(const char* s, const char* end)
-	: S(s), End(end)
+    : S(s), End(end)
 {
 	check_first();
 }
@@ -246,7 +288,7 @@ cp::iter& cp::iter::operator++(int)
 	return *this;
 }
 
-template<bool is_check>
+template <bool is_check>
 void cp::iter::increment()
 {
 	// Guard against iteration after having reached the end.
@@ -304,5 +346,4 @@ bool cp::iter::known_end() const
 {
 	return End != nullptr;
 }
-
 }

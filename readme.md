@@ -1,5 +1,9 @@
 # utfz - a tiny C++ library for parsing and encoding utf-8
 
+TODO: Get rid of support for NUL code points.
+Add one special function "decode_any" which supports the NUL code point, for people that need
+to decode strange/malicious content.
+
 * Two source files (utfz.cpp and utfz.h)
 * Does not throw exceptions - uses error codes.
 * 100% line coverage in tests

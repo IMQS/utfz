@@ -1,6 +1,9 @@
+#define _CRT_SECURE_NO_WARNINGS 1
 #include <stdio.h>
 #include <string.h>
+#include <stdlib.h>
 #include <assert.h>
+#include <time.h>
 #include <vector>
 #include "utfz.h"
 
@@ -15,7 +18,7 @@ void dump(const char* s)
 {
 	const char* end = s + strlen(s);
 	printf("%s (%d): ", s, utfz::seq_len(s[0]));
-	char const * iter = s;
+	char const* iter = s;
 	while (iter != end)
 	{
 		int cp = utfz::next(iter, end);
@@ -23,7 +26,7 @@ void dump(const char* s)
 		if (cp == utfz::invalid)
 			break;
 	}
-	
+
 	// test cp iterator on char* with unknown length
 	std::vector<int> cp1;
 	printf("== ");
@@ -32,11 +35,11 @@ void dump(const char* s)
 		cp1.push_back(cp);
 		printf("%02x ", cp);
 	}
-	
+
 	// test cp iterator on std::string (ie known length)
 	printf("== ");
 	std::vector<int> cp2;
-	std::string sz = s;
+	std::string      sz = s;
 	for (auto cp : utfz::cp(sz))
 	{
 		cp2.push_back(cp);
@@ -46,6 +49,47 @@ void dump(const char* s)
 	for (size_t i = 0; i < cp1.size(); i++)
 		assert(cp1[i] == cp2[i]);
 	printf("\n");
+}
+
+void bench(const char* name, int runLength[4])
+{
+	srand(0);
+	int      tokens       = 100000;
+	int      encSize      = tokens * 4 + 1;
+	char*    enc          = (char*) malloc(encSize);
+	char*    encP         = enc;
+	unsigned rl           = 3; // index into runLength[]
+	int      remain       = 0; // remaining counts inside our current bucket of runLength[]
+	int      maxValues[4] = {utfz::max1, utfz::max2, utfz::max3, utfz::max4};
+	for (int i = 0; i < tokens; i++)
+	{
+		while (remain == 0)
+		{
+			rl     = (rl + 1) % 4;
+			remain = runLength[rl];
+		}
+		unsigned cp = (unsigned) rand();
+		cp          = cp % maxValues[rl];
+		int n       = utfz::encode(encP, cp);
+		assert(n != 0);
+		encP += n;
+	}
+	char* encEnd = encP;
+	assert(encEnd - enc < (intptr_t) encSize);
+	*encEnd = 0;
+
+	int sum = 0;
+	double start = clock();
+	for (int i = 0; i < 5000; i++)
+	{
+		for (auto cp : utfz::cp(enc, encEnd - enc))
+			sum += cp;
+	}
+	double end = (clock() - start) / CLOCKS_PER_SEC;
+
+	printf("%-10s, %.0f ms\n", name, end * 1000);
+
+	free(enc);
 }
 
 int main(int argc, char** argv)
@@ -60,6 +104,14 @@ int main(int argc, char** argv)
 	const int   allsize      = 6;
 	const char* all[allsize] = {s1, s2, s3, s4, sinvalid, sempty};
 	int         len[allsize] = {1, 2, 3, 4, 0, 0};
+
+	for (int i = 1; i < 100000; i++)
+	{
+		char buf[10];
+		int len = utfz::encode(buf, i);
+		int r = utfz::seq_len(buf[0]);
+		assert(len == r);
+	}
 
 	for (int i = 0; i < allsize; i++)
 	{
@@ -80,12 +132,12 @@ int main(int argc, char** argv)
 			// start on invalid or null
 			start = all[i] + 1;
 			assert(utfz::next(start) == utfz::invalid);
-			
+
 			// truncated code point
 			char copy[30];
 			strcpy(copy, all[i]);
 			copy[len[i] - 1] = 0;
-			start = copy;
+			start            = copy;
 			assert(utfz::next(start) == utfz::invalid);
 		}
 	}
@@ -93,10 +145,10 @@ int main(int argc, char** argv)
 	int testCP[] = {0, 1, 0x7f, 0x80, 0x7ff, 0x800, 0xffff, 0x10000, 0x10ffff};
 	for (size_t i = 0; i < sizeof(testCP) / sizeof(testCP[0]); i++)
 	{
-		char encoded[5];
+		char        encoded[5];
 		std::string encstr;
-		
-		int enc_len = utfz::encode(encoded, testCP[i]);
+
+		int enc_len      = utfz::encode(encoded, testCP[i]);
 		encoded[enc_len] = 0;
 
 		assert(utfz::encode(encstr, testCP[i]));
@@ -111,12 +163,12 @@ int main(int argc, char** argv)
 	{
 		// decoding of NUL code point
 		const char* enc = "\0";
-		
+
 		// success when specifying length
 		int seq_len = 0;
-		int cp = utfz::decode(enc, enc + 1, seq_len);
+		int cp      = utfz::decode(enc, enc + 1, seq_len);
 		assert(cp == 0 && seq_len == 1);
-		
+
 		// fails if length is unspecified
 		cp = utfz::decode(enc);
 		assert(cp == utfz::invalid);
@@ -146,13 +198,24 @@ int main(int argc, char** argv)
 		// invalid code point
 		char encoded[4];
 		assert(utfz::encode(encoded, 0x110000) == 0);
+
+		// support for Modified UTF-8 decoding
+		encoded[0] = (char) 0xc0;
+		encoded[1] = (char) 0x80;
+		assert(utfz::decode(encoded) == 0);
+		assert(utfz::decode(encoded, encoded + 2) == 0);
+
+		// detect overlong sequences
+		encoded[0] = (char) 0xc0;
+		encoded[1] = (char) 0x81;
+		assert(utfz::decode(encoded) == utfz::invalid);
 	}
 
 	{
 		// Some arbitrary code to make sure we get 100% code coverage
-		
+
 		const char* str = "h";
-		
+
 		// next_modified on valid input
 		const char* s = str;
 		assert(utfz::next(s) == 'h');
@@ -172,10 +235,21 @@ int main(int argc, char** argv)
 		{
 			std::string z;
 			z += (char) 0xc0;
-			auto cp2 = utfz::cp(z);
+			auto cp2  = utfz::cp(z);
 			auto iter = cp2.begin();
 			assert(iter == cp2.end()); // terminate immediately because first token is truncated
 		}
+	}
+
+	{
+		// speed
+		printf("\n");
+		int ascii[4] = {1, 0, 0, 0};
+		int low[4]   = {10, 2, 1, 0};
+		int high[4]  = {1, 1, 1, 1};
+		bench("ascii", ascii);
+		bench("low", low);
+		bench("high", high);
 	}
 
 	return 0;
