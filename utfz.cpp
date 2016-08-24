@@ -11,9 +11,12 @@ enum
 	min_cp_4             = 0x10000, // minimum code point that is allowed to be encoded with 4 bytes
 	utf16_surrogate_low  = 0xd800,
 	utf16_surrogate_high = 0xdfff,
+	invalid_fffe         = 0xfffe, // this is used for BOM detection
+	invalid_ffff         = 0xffff, // don't know why this is illegal
 };
 
 // Index from the high 5 bits of the first byte in a sequence to the length of the sequence
+// Imperative that -1 == invalid
 const int8_t seq_len_table[32] = {
     1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, //  0..15 (00000..01111)
     -1, -1, -1, -1, -1, -1, -1, -1,                 // 16..23 (10000..10111) - 10... is only legal as prefixes for continuation bytes
@@ -23,47 +26,53 @@ const int8_t seq_len_table[32] = {
     -1,                                             // 31     (11111)
 };
 
-template <bool Modified>
-int T_seq_len(char c)
-{
-	if (Modified)
-	{
-		// This is the only place where we enforce the use of "Modified UTF-8",
-		// as described in the documentation inside utfz.h
-		if (c == 0)
-			return 0;
-	}
-
-	// Lookup table is 0.92x the speed of the branches down below - i7 2600K.
-	uint8_t high5 = ((uint8_t) c) >> 3;
-	int8_t  len   = seq_len_table[high5];
-	return len;
-
-	/*
-	if ((c & 0x80) == 0)
-		return 1;
-
-	if ((c & 0xe0) == 0xc0)
-		return 2;
-
-	if ((c & 0xf0) == 0xe0)
-		return 3;
-
-	if ((c & 0xf8) == 0xf0)
-		return 4;
-	*/
-
-	return invalid;
-}
-
 int seq_len(char c)
 {
-	return T_seq_len<false>(c);
+	// We do not allow the U+0000 code point
+	if (c == 0)
+		return invalid;
+
+	uint8_t high5 = ((uint8_t) c) >> 3;
+	return seq_len_table[high5];
 }
 
-int seq_len_modified(char c)
+const char* restart(const char* s)
 {
-	return T_seq_len<true>(c);
+	for (; *s != 0; s++)
+	{
+		if (seq_len(*s) != invalid)
+			break;
+	}
+	return s;
+}
+
+const char* restart(const char* s, const char* end)
+{
+	if (s >= end)
+		return end;
+	for (; s != end; s++)
+	{
+		if (seq_len(*s) != invalid)
+			break;
+	}
+	return s;
+}
+
+static bool is_legal_3_byte_code(int cp)
+{
+	// overlong sequence
+	if (cp < min_cp_3)
+		return false;
+	
+	// UTF-16 surrogate pairs
+	if (cp >= utf16_surrogate_low && cp <= utf16_surrogate_high)
+		return false;
+
+	// BOM and ffff
+	if (cp == invalid_fffe || cp == invalid_ffff)
+		return false;
+
+	return true;
 }
 
 int decode(const char* s, const char* end)
@@ -74,12 +83,13 @@ int decode(const char* s, const char* end)
 
 int decode(const char* s, const char* end, int& _seq_len)
 {
+	_seq_len = 0;
 	int slen = seq_len(s[0]);
 	if (slen == invalid)
-		return invalid;
+		return replace;
 
 	if ((intptr_t)(end - s) < (intptr_t) slen)
-		return invalid;
+		return replace;
 
 	int cp = 0;
 	switch (slen)
@@ -89,21 +99,18 @@ int decode(const char* s, const char* end, int& _seq_len)
 		break;
 	case 2:
 		cp = ((s[0] & 0x1f) << 6) | (s[1] & 0x3f);
-		// tolerate the zero character here, to support Modified UTF-8.
-		if (cp < min_cp_2 && cp != 0)
-			return invalid;
+		if (cp < min_cp_2)
+			return replace;
 		break;
 	case 3:
 		cp = ((s[0] & 0xf) << 12) | ((s[1] & 0x3f) << 6) | (s[2] & 0x3f);
-		if (cp < min_cp_3)
-			return invalid;
-		if (cp >= utf16_surrogate_low && cp <= utf16_surrogate_high)
-			return invalid;
+		if (!is_legal_3_byte_code(cp))
+			return replace;
 		break;
 	case 4:
 		cp = ((s[0] & 0x7) << 18) | ((s[1] & 0x3f) << 12) | ((s[2] & 0x3f) << 6) | (s[3] & 0x3f);
 		if (cp < min_cp_4)
-			return invalid;
+			return replace;
 		break;
 	}
 	_seq_len = slen;
@@ -118,9 +125,10 @@ int decode(const char* s)
 
 int decode(const char* s, int& _seq_len)
 {
-	int slen = seq_len_modified(s[0]);
-	if (slen == 0 || slen == invalid)
-		return invalid;
+	_seq_len = 0;
+	int slen = seq_len(s[0]);
+	if (slen == invalid)
+		return replace;
 
 	int cp = 0;
 	switch (slen)
@@ -130,25 +138,24 @@ int decode(const char* s, int& _seq_len)
 		break;
 	case 2:
 		if (s[1] == 0)
-			return invalid;
+			return replace;
 		cp = ((s[0] & 0x1f) << 6) | (s[1] & 0x3f);
-		// tolerate the zero character here, to support Modified UTF-8.
-		if (cp < min_cp_2 && cp != 0)
-			return invalid;
+		if (cp < min_cp_2)
+			return replace;
 		break;
 	case 3:
 		if (s[1] == 0 || s[2] == 0)
-			return invalid;
+			return replace;
 		cp = ((s[0] & 0xf) << 12) | ((s[1] & 0x3f) << 6) | (s[2] & 0x3f);
-		if (cp < min_cp_3)
-			return invalid;
+		if (!is_legal_3_byte_code(cp))
+			return replace;
 		break;
 	case 4:
 		if (s[1] == 0 || s[2] == 0 || s[3] == 0)
-			return invalid;
+			return replace;
 		cp = ((s[0] & 0x7) << 18) | ((s[1] & 0x3f) << 12) | ((s[2] & 0x3f) << 6) | (s[3] & 0x3f);
 		if (cp < min_cp_4)
-			return invalid;
+			return replace;
 		break;
 	}
 	_seq_len = slen;
@@ -159,7 +166,9 @@ int next(const char*& s, const char* end)
 {
 	int slen;
 	int cp = decode(s, end, slen);
-	if (cp != invalid)
+	if (cp == replace)
+		s = restart(s, end);
+	else
 		s += slen;
 	return cp;
 }
@@ -168,7 +177,9 @@ int next(const char*& s)
 {
 	int slen;
 	int cp = decode(s, slen);
-	if (cp != invalid)
+	if (cp == replace)
+		s = restart(s);
+	else
 		s += slen;
 	return cp;
 }
@@ -178,10 +189,8 @@ int encode(char* buf, int cp)
 	unsigned ucp = (unsigned) cp;
 	if (ucp == 0)
 	{
-		// Always output "Modified UTF-8"
-		buf[0] = (char) 0xc0;
-		buf[1] = (char) 0x80;
-		return 2;
+		// we do not support encoding or decoding U+0000
+		return 0;
 	}
 	else if (ucp <= 0x7f)
 	{
@@ -268,27 +277,25 @@ cp::cp(const std::string& s)
 cp::iter::iter(const char* s, const char* end)
     : S(s), End(end)
 {
-	check_first();
-}
-
-void cp::iter::check_first()
-{
-	increment<true>();
+	if (!known_end() && S != nullptr)
+	{
+		if (S[0] == 0)
+			S = End;
+	}
 }
 
 cp::iter& cp::iter::operator++()
 {
-	increment<false>();
+	increment();
 	return *this;
 }
 
 cp::iter& cp::iter::operator++(int)
 {
-	increment<false>();
+	increment();
 	return *this;
 }
 
-template <bool is_check>
 void cp::iter::increment()
 {
 	// Guard against iteration after having reached the end.
@@ -300,36 +307,32 @@ void cp::iter::increment()
 		int len = seq_len(S[0]);
 		if (len == invalid)
 		{
-			S = End;
+			S = restart(S, End);
 		}
 		else
 		{
 			if (S + len > End)
-			{
 				S = End;
-			}
 			else
-			{
-				if (!is_check)
-					S += len;
-			}
+				S += len;
 		}
 	}
 	else
 	{
-		int len = seq_len_modified(S[0]);
-		if (len == invalid || len == 0)
+		int len = seq_len(S[0]);
+		if (len == invalid)
 		{
-			S = End;
+			const char* nextS = restart(S);
+			if (nextS == S || nextS[0] == 0)
+				S = End;
+			else
+				S = nextS;
 		}
 		else
 		{
-			if (!is_check)
-			{
-				S += len;
-				if (S[0] == 0)
-					S = End;
-			}
+			S += len;
+			if (S[0] == 0)
+				S = End;
 		}
 	}
 }
