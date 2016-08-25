@@ -12,42 +12,62 @@
 cl /nologo /Zi /EHsc test.cpp utfz.cpp && test
 opencppcoverage --sources c:\dev\head\maps\third_party\utfz --modules test.exe -- test.exe
 
+
 */
 
-void dump(const char* s)
+void test_iterators(const char* s)
 {
 	const char* end = s + strlen(s);
 	printf("%s (%d): ", s, utfz::seq_len(s[0]));
-	char const* iter = s;
-	while (iter != end)
-	{
-		int cp = utfz::next(iter, end);
-		printf("%02x ", cp);
-		if (cp == utfz::replace)
-			break;
-	}
 
-	// test cp iterator on char* with unknown length
+	// iterate using 'next', and with unknown length
 	std::vector<int> cp1;
-	printf("== ");
-	for (auto cp : utfz::cp(s))
+	char const*      iter = s;
+	int              cp;
+	while (utfz::next(iter, cp))
 	{
 		cp1.push_back(cp);
 		printf("%02x ", cp);
 	}
 
-	// test cp iterator on std::string (ie known length)
 	printf("== ");
+
+	// iterate using 'next', and with known length
 	std::vector<int> cp2;
-	std::string      sz = s;
-	for (auto cp : utfz::cp(sz))
+	iter = s;
+	while (utfz::next(iter, end, cp))
 	{
 		cp2.push_back(cp);
 		printf("%02x ", cp);
 	}
+
+	// test cp iterator on char* with unknown length
+	std::vector<int> cp3;
+	printf("== ");
+	for (auto cp : utfz::cp(s))
+	{
+		cp3.push_back(cp);
+		printf("%02x ", cp);
+	}
+
+	// test cp iterator on std::string (ie known length)
+	printf("== ");
+	std::vector<int> cp4;
+	std::string      sz = s;
+	for (auto cp : utfz::cp(sz))
+	{
+		cp4.push_back(cp);
+		printf("%02x ", cp);
+	}
 	assert(cp1.size() == cp2.size());
+	assert(cp1.size() == cp3.size());
+	assert(cp1.size() == cp4.size());
 	for (size_t i = 0; i < cp1.size(); i++)
+	{
 		assert(cp1[i] == cp2[i]);
+		assert(cp1[i] == cp3[i]);
+		assert(cp1[i] == cp4[i]);
+	}
 	printf("\n");
 }
 
@@ -78,7 +98,7 @@ void bench(const char* name, int runLength[4])
 	assert(encEnd - enc < (intptr_t) encSize);
 	*encEnd = 0;
 
-	int sum = 0;
+	int    sum   = 0;
 	double start = clock();
 	for (int i = 0; i < 5000; i++)
 	{
@@ -92,55 +112,67 @@ void bench(const char* name, int runLength[4])
 	free(enc);
 }
 
+int encode_any(int cp, char* buf)
+{
+	unsigned ucp = (unsigned) cp;
+	if (ucp <= 0x7f)
+	{
+		buf[0] = ucp;
+		return 1;
+	}
+	else if (ucp <= 0x7ff)
+	{
+		buf[0] = 0xc0 | (ucp >> 6);
+		buf[1] = 0x80 | (ucp & 0x3f);
+		return 2;
+	}
+	else if (ucp <= 0xffff)
+	{
+		buf[0] = 0xe0 | (ucp >> 12);
+		buf[1] = 0x80 | ((ucp >> 6) & 0x3f);
+		buf[2] = 0x80 | (ucp & 0x3f);
+		return 3;
+	}
+	else if (ucp <= 0x200000)
+	{
+		buf[0] = 0xf0 | (ucp >> 18);
+		buf[1] = 0x80 | ((ucp >> 12) & 0x3f);
+		buf[2] = 0x80 | ((ucp >> 6) & 0x3f);
+		buf[3] = 0x80 | (ucp & 0x3f);
+		return 4;
+	}
+	else
+	{
+		return 0;
+	}
+}
+
 int main(int argc, char** argv)
 {
-	const char* s1       = "$";  // 1 byte
-	const char* s2       = "¢";  // 2 bytes
-	const char* s3       = "€";  // 3 bytes
-	const char* s4       = "𐍈"; // 4 bytes
-	const char* sinvalid = "\x80";
-	const char* sempty   = "";
+	const char* s1        = "$";  // 1 byte
+	const char* s2        = "¢";  // 2 bytes
+	const char* s3        = "€";  // 3 bytes
+	const char* s4        = "𐍈"; // 4 bytes
+	const char* sinvalid1 = "\x80";
+	const char* sinvalid2 =
+	    "\x80"
+	    "a";
+	const char* sempty = "";
 
-	const int   allsize      = 6;
-	const char* all[allsize] = {s1, s2, s3, s4, sinvalid, sempty};
-	int         len[allsize] = {1, 2, 3, 4, 0, 0};
+	const int   allsize      = 7;
+	const char* all[allsize] = {s1, s2, s3, s4, sinvalid1, sinvalid2, sempty};
+	int         len[allsize] = {1, 2, 3, 4, 1, 2, 0};
 
-	for (int i = 1; i < 100000; i++)
+	for (int i = 1; i < 50000; i++)
 	{
 		char buf[10];
-		int len = utfz::encode(buf, i);
-		int r = utfz::seq_len(buf[0]);
+		int  len = utfz::encode(buf, i);
+		int  r   = utfz::seq_len(buf[0]);
 		assert(len == r);
 	}
 
 	for (int i = 0; i < allsize; i++)
-	{
-		dump(all[i]);
-		if (len[i] != 0)
-		{
-			const char* start;
-			// make sure buffer overflow checking is correct
-
-			// known length
-			start = all[i];
-			assert(utfz::next(start, start + len[i]) != utfz::replace);
-
-			start = all[i];
-			assert(utfz::next(start, start + len[i] - 1) == utfz::replace);
-
-			// unknown length (null terminated)
-			// start on invalid or null
-			start = all[i] + 1;
-			assert(utfz::next(start) == utfz::replace);
-
-			// truncated code point
-			char copy[30];
-			strcpy(copy, all[i]);
-			copy[len[i] - 1] = 0;
-			start            = copy;
-			assert(utfz::next(start) == utfz::replace);
-		}
-	}
+		test_iterators(all[i]);
 
 	int testCP[] = {1, 0x7f, 0x80, 0x7ff, 0x800, 0xfffd, 0x10000, 0x10ffff};
 	for (size_t i = 0; i < sizeof(testCP) / sizeof(testCP[0]); i++)
@@ -213,10 +245,13 @@ int main(int argc, char** argv)
 		// Some arbitrary code to make sure we get 100% code coverage
 
 		const char* str = "h";
+		char        buf[10];
 
 		// next_modified on valid input
 		const char* s = str;
-		assert(utfz::next(s) == 'h');
+		int         cp;
+		utfz::next(s, cp);
+		assert(cp == 'h');
 		assert(s == str + 1);
 
 		// postfix increment
@@ -237,8 +272,41 @@ int main(int argc, char** argv)
 		//	auto iter = cp2.begin();
 		//	assert(iter == cp2.end()); // terminate immediately because first token is truncated
 		//}
+
+		assert(utfz::restart(str + 1, str) == str);
+
+		// legality of 3-byte codes
+		int slen = 0;
+		// overlong
+		assert(utfz::decode("\xE0"
+		                    "\x01"
+		                    "\x01") == utfz::replace);
+		// UTF-16 surrogate pairs
+		for (int i = 0xd800; i <= 0xdfff; i++)
+		{
+			assert(encode_any(i, buf) == 3);
+			assert(utfz::decode(buf) == utfz::replace);
+			assert(utfz::decode(buf, buf + 3) == utfz::replace);
+		}
+		// two illegal specials (for BOMs)
+		assert(encode_any(0xfffe, buf) == 3);
+		assert(utfz::decode(buf) == utfz::replace);
+		assert(utfz::decode(buf, buf + 3) == utfz::replace);
+
+		assert(encode_any(0xffff, buf) == 3);
+		assert(utfz::decode(buf) == utfz::replace);
+		assert(utfz::decode(buf, buf + 3) == utfz::replace);
+
+		// too large
+		assert(encode_any(0x10ffff, buf) == 4);
+		assert(utfz::decode(buf) == 0x10ffff);
+		assert(utfz::decode(buf, buf + 4) == 0x10ffff);
+		assert(encode_any(0x10ffff + 1, buf) == 4);
+		assert(utfz::decode(buf) == utfz::replace);
+		assert(utfz::decode(buf, buf + 4) == utfz::replace);
 	}
 
+#ifndef _DEBUG
 	{
 		// speed
 		printf("\n");
@@ -249,6 +317,7 @@ int main(int argc, char** argv)
 		bench("low", low);
 		bench("high", high);
 	}
+#endif
 
 	return 0;
 }

@@ -63,7 +63,7 @@ static bool is_legal_3_byte_code(int cp)
 	// overlong sequence
 	if (cp < min_cp_3)
 		return false;
-	
+
 	// UTF-16 surrogate pairs
 	if (cp >= utf16_surrogate_low && cp <= utf16_surrogate_high)
 		return false;
@@ -109,7 +109,7 @@ int decode(const char* s, const char* end, int& _seq_len)
 		break;
 	case 4:
 		cp = ((s[0] & 0x7) << 18) | ((s[1] & 0x3f) << 12) | ((s[2] & 0x3f) << 6) | (s[3] & 0x3f);
-		if (cp < min_cp_4)
+		if (cp < min_cp_4 || cp > max4)
 			return replace;
 		break;
 	}
@@ -154,7 +154,7 @@ int decode(const char* s, int& _seq_len)
 		if (s[1] == 0 || s[2] == 0 || s[3] == 0)
 			return replace;
 		cp = ((s[0] & 0x7) << 18) | ((s[1] & 0x3f) << 12) | ((s[2] & 0x3f) << 6) | (s[3] & 0x3f);
-		if (cp < min_cp_4)
+		if (cp < min_cp_4 || cp > max4)
 			return replace;
 		break;
 	}
@@ -162,26 +162,36 @@ int decode(const char* s, int& _seq_len)
 	return cp;
 }
 
-int next(const char*& s, const char* end)
+bool next(const char*& s, const char* end, int& cp)
 {
+	if (s == end)
+	{
+		cp = replace;
+		return false;
+	}
 	int slen;
-	int cp = decode(s, end, slen);
+	cp = decode(s, end, slen);
 	if (cp == replace)
 		s = restart(s, end);
 	else
 		s += slen;
-	return cp;
+	return true;
 }
 
-int next(const char*& s)
+bool next(const char*& s, int& cp)
 {
+	if (*s == 0)
+	{
+		cp = replace;
+		return false;
+	}
 	int slen;
-	int cp = decode(s, slen);
+	cp = decode(s, slen);
 	if (cp == replace)
 		s = restart(s);
 	else
 		s += slen;
-	return cp;
+	return true;
 }
 
 int encode(char* buf, int cp)
@@ -205,6 +215,8 @@ int encode(char* buf, int cp)
 	}
 	else if (ucp <= 0xffff)
 	{
+		if (!is_legal_3_byte_code(cp))
+			return 0;
 		buf[0] = 0xe0 | (ucp >> 12);
 		buf[1] = 0x80 | ((ucp >> 6) & 0x3f);
 		buf[2] = 0x80 | (ucp & 0x3f);

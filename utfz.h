@@ -54,11 +54,11 @@ enum code
 
 enum limits
 {
-	max1 = 0x7f,     // maximum code point that can be represented by one byte
-	max2 = 0x7ff,    // maximum code point that can be represented by two bytes
-	max3 = 0xffff,   // maximum code point that can be represented by three bytes
-	max4 = 0x10ffff, // maximum code point that can be represented by four bytes
-	replace = 0xfffd, // replacement character returned when decoding fails
+	max1    = 0x7f,     // maximum code point that can be represented by one byte
+	max2    = 0x7ff,    // maximum code point that can be represented by two bytes
+	max3    = 0xffff,   // maximum code point that can be represented by three bytes
+	max4    = 0x10ffff, // maximum code point that can be represented by four bytes
+	replace = 0xfffd,   // replacement character returned when decoding fails
 };
 
 // Returns the sequence length (1,2,3,4) or 'invalid' if not a valid leading byte,
@@ -86,15 +86,17 @@ int decode(const char* s);
 int decode(const char* s, int& seq_len);
 
 // Returns the code point at 's', and increments 's' so that it points to the
-// start of the next plausible code point.
+// start of the next plausible code point, or 'end' if the next plausible
+// code point exceeds end.
 // If 's' is not a valid code point (for whatever reason, including buffer
-// overflow), then 'replace' is returned.
-int next(const char*& s, const char* end);
+// overflow), then cp is set to 'replace'.
+// Returns true if 's' was incremented.
+bool next(const char*& s, const char* end, int& cp);
 
 // A variant of next where you do not know the length of the string
-// This assumes the string is null terminated, and returns 'replace' if
-// a code point is truncated by a null terminator.
-int next(const char*& s);
+// This assumes the string is null terminated.
+// Returns true if 's' was incremented.
+bool next(const char*& s, int& cp);
 
 // Encode the code point 'cp', into the buffer 'buf'.
 // Returns the encoded size (1..4), or 0 for an invalid code point, which includes
@@ -133,8 +135,8 @@ public:
 
 		iter(const char* s, const char* end);
 
-		bool  operator==(const iter& b) const { return S == b.S; }
-		bool  operator!=(const iter& b) const { return S != b.S; }
+		bool operator==(const iter& b) const { return S == b.S; }
+		bool operator!=(const iter& b) const { return S != b.S; }
 		iter& operator++();
 		iter& operator++(int);
 
