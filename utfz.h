@@ -1,3 +1,6 @@
+// -----------------------------------------------------------------------
+// This is free and unencumbered software released into the public domain.
+// -----------------------------------------------------------------------
 #pragma once
 
 #include <string>
@@ -5,60 +8,32 @@
 /* A tiny UTF8 iterator library for C++.
 
 The goal of this library is to provide a tiny set of utilities that make it easy
-to iterate over the code points of a UTF8 string, as well as build up a UTF8 string.
+to iterate over the code points of a UTF8 string, as well as build up a UTF8 string
+from 32-bit integer code points.
 
-One notable exception to the UTF-8 specification is that this library doesn't allow
-the NUL (U+0000) code point at all. Attempting to decode or encode the NUL code point
-will result in an "invalid" response.
+When an error is detected, the library returns utfz::replace (U+FFFD), and attempts
+to restart parsing at the next legal code point.
 
-How is this justified?
+Note that U+0000 is considered an illegal code point by this library, and it is 
+replaced by U+FFFD when decoding.
 
-To turn the question around, why is it reasonable to use the NUL code point in a string?
-Unicode is clearly an encoding designed to store text. It's true that Unicode brings
-with it the ASCII history, so it includes some of the non-textual code points, commonly
-referred to as "Control Codes", such as Tab and Line Feed. These are useful in the context
-of storing text. However, what does one need the NUL code point for? If you want a record
-separator, pick any of the other esoteric ASCII characters. For example, U+001E "Record Separator"
-was designed exactly for that. Or how about U+0004 "End-of-transmission character"? What
-*precisely* do you need that NUL code point for?
-
-On the other hand, the risks posed to C/C++ software are significant.
-
-Before deciding that you need to support NUL code points, think about your data and if possible,
-test some sample data to see whether supporting NUL is actually necessary.
-
-Examples of real-world U+0000 usage:
-
-find . -print0 | xargs -0 -n1 ls
-
-In this case, find and xargs work together, by agreeing that find results are separated by
-a zero byte, and xargs understands that it's inputs are separated by the zero byte. This
-works around the classic problems that arise when trying to correctly escape command-line
-parameters. I think it can be reasonably argued that the zero byte in this case is
-"out of band". In other words, 'find' is not sending a contiguous UTF-8 string that
-contains U+0000 code points. Rather, it is using the zero byte to signify the end of
-one string, and the start of another. So this is not an example of the U+0000 code point
-in action, but rather a counter-example. If you look at the source code of various xargs
-implementations, they all parse the arguments by inspecting byte after byte, and perform
-the record separation manually. If they were to do any UTF-8 decoding (which they don't
-actually need to do), then they would do so AFTER separating the records at zero byte
-boundaries.
+See more in the readme.
 
 */
 namespace utfz {
 
 enum code
 {
-	invalid = -1,
+	invalid = -1,     // returned by seq_len when not a valid leading byte
+	replace = 0xfffd, // replacement character returned when decoding fails
 };
 
 enum limits
 {
-	max1    = 0x7f,     // maximum code point that can be represented by one byte
-	max2    = 0x7ff,    // maximum code point that can be represented by two bytes
-	max3    = 0xffff,   // maximum code point that can be represented by three bytes
-	max4    = 0x10ffff, // maximum code point that can be represented by four bytes
-	replace = 0xfffd,   // replacement character returned when decoding fails
+	max1 = 0x7f,     // maximum code point that can be represented by one byte
+	max2 = 0x7ff,    // maximum code point that can be represented by two bytes
+	max3 = 0xffff,   // maximum code point that can be represented by three bytes
+	max4 = 0x10ffff, // maximum code point that can be represented by four bytes
 };
 
 // Returns the sequence length (1,2,3,4) or 'invalid' if not a valid leading byte,

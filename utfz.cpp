@@ -1,3 +1,6 @@
+// -----------------------------------------------------------------------
+// This is free and unencumbered software released into the public domain.
+// -----------------------------------------------------------------------
 #include "utfz.h"
 #include <stdint.h>
 #include <string.h>
@@ -343,8 +346,13 @@ void cp::iter::increment()
 		else
 		{
 			S += len;
-			if (S[0] == 0)
+			if ((len == 2 && (S[-1] == 0)) ||
+			    (len == 3 && (S[-2] == 0 || S[-1] == 0)) ||
+			    (len == 4 && (S[-3] == 0 || S[-2] == 0 || S[-1] == 0)) ||
+			    (S[0] == 0))
+			{
 				S = End;
+			}
 		}
 	}
 }

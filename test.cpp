@@ -263,16 +263,6 @@ int main(int argc, char** argv)
 		std::string ebuf;
 		assert(!utfz::encode(ebuf, 0x10ffff + 1));
 
-		// iterator abort for string of known length
-		// We need to craft a truncated code point for this.
-		//{
-		//	std::string z;
-		//	z += (char) 0xc0;
-		//	auto cp2  = utfz::cp(z);
-		//	auto iter = cp2.begin();
-		//	assert(iter == cp2.end()); // terminate immediately because first token is truncated
-		//}
-
 		assert(utfz::restart(str + 1, str) == str);
 
 		// legality of 3-byte codes
@@ -304,6 +294,58 @@ int main(int argc, char** argv)
 		assert(encode_any(0x10ffff + 1, buf) == 4);
 		assert(utfz::decode(buf) == utfz::replace);
 		assert(utfz::decode(buf, buf + 4) == utfz::replace);
+
+		// illegal encoding
+		assert(utfz::encode(buf, 0xfffe) == 0);
+
+		// decode truncated code point with known length
+		assert(encode_any(0xd123, buf) == 3);
+		assert(utfz::decode(buf, buf + 2) == utfz::replace);
+
+		// decode truncated code points with unknown length
+		assert(encode_any(utfz::max1 + 1, buf) == 2);
+		buf[1] = 0;
+		assert(utfz::decode(buf) == utfz::replace);
+
+		assert(encode_any(utfz::max2 + 1, buf) == 3);
+		buf[2] = 0;
+		assert(utfz::decode(buf) == utfz::replace);
+
+		assert(encode_any(utfz::max3 + 1, buf) == 4);
+		buf[3] = 0;
+		assert(utfz::decode(buf) == utfz::replace);
+
+		// iterate on empty string
+		const char* empty = "";
+		auto iter = utfz::cp(empty).begin();
+		auto end = utfz::cp(empty).end();
+		iter++;
+		iter++;
+		assert(iter == end);
+		iter = utfz::cp(empty, 0).begin();
+		end = utfz::cp(empty, 0).end();
+		iter++;
+		iter++;
+		assert(iter == end);
+
+		// iterate on truncated string (known length)
+		assert(encode_any(utfz::max3 + 1, buf) == 4);
+		iter = utfz::cp(buf, 3).begin();
+		end = utfz::cp(buf, 3).end();
+		assert(iter != end);
+		assert(*iter == utfz::replace);
+		iter++;
+		assert(iter == end);
+
+		// iterate on truncated string (unknown length)
+		assert(encode_any(utfz::max3 + 1, buf) == 4);
+		buf[3] = 0;
+		iter = utfz::cp(buf).begin();
+		end = utfz::cp(buf).end();
+		assert(iter != end);
+		assert(*iter == utfz::replace);
+		iter++;
+		assert(iter == end);
 	}
 
 #ifndef _DEBUG
