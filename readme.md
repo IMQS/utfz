@@ -9,6 +9,8 @@ from 32-bit integer code points.
 * 100% line coverage in tests
 * All iteration methods support both null terminated strings, and explicit length strings
 * The U+0000 code point is treated as invalid, and replaced with the standard replacement character U+FFFD
+* Checks for all invalid code points (overlong sequences, UTF-16 surrogate pairs, 0xFFFE, 0xFFFF)
+* Returns the replacement character U+FFFD for any invalid sequences, and continues parsing on the next plausible code point
 
 Example of printing code points to the console:
 ```cpp
@@ -23,16 +25,17 @@ std::string input;
 std::string low;
 for (int cp : utfz::cp(input))
     utfz::encode(low, ::tolower(cp));
+// 'low' now contains the lower-case representation of 'input'
 ```
 
 Iterating manually, over a null terminated string:
 ```cpp
-// str: const char*
-const char* pos = str;
+const char* pos = input; // input is const char*
 int cp;
 while (utfz::next(pos, cp))
 	printf("%d ", cp);
 ```
+
 ## Why not support the U+0000 code point?
 In UTF-8, the U+0000 code point is represented by a single zero byte. In C, this
 is a null terminator. Firstly, it is impossible to decode this code point when
@@ -44,11 +47,21 @@ that you're not going to be using any null terminated string processing function
 inside your code. This is not a safe assumption for the majority of C++ programs,
 so we choose simply to not support it.
 
+Imagine the case where you receive a potentially malicious string as input. You
+first run a "safety-check" function on that string, and if the safety check passes,
+you then run the actual business on it. It's possible that the safety check
+function takes a null terminated string as input, but the actual business function
+takes a string with explicit length. In such a case, an attacker can embed a 
+zero byte inside the string, and store the malicious part after the zero byte.
+Now, your safety check passes, and you end up processing the malicious input.
+
 There is an alternative to supporting the zero byte as a legal character, and that
 is "Modified UTF-8", which encodes U+0000 as an overlong sequence of two bytes.
 While this approach does get rid of some of the security and robustness concerns,
 it's hard to believe that there aren't corner cases waiting to be exploited here
-too.
+too. But still, why? Unicode is not intended to be a binary-safe transport
+mechanism for an arbitrary string of bits. The code point U+0000 can only be
+a special record separator, or something similar, which you can deal with manually.
 
 ### Can I still use this library to decode strings with U+0000 code points?
 The answer depends on how the U+0000 code point is used. The typical use case
@@ -63,8 +76,7 @@ while (...)
 {
 	if (*input == 0)
 	{
-		// record separator
-		// ...
+		// process the record ...
 		input++;
 	}
 	else
@@ -72,7 +84,7 @@ while (...)
 		int cp;
 		if (!utfz::next(input, end_of_input, cp))
 			break;
-		// ...
+		// process the code point 'cp' ...
 	}
 }
 ```
