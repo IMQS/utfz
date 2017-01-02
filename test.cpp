@@ -196,32 +196,37 @@ int main(int argc, char** argv)
 		// decoding of NUL code point
 		const char* enc = "\0";
 
-		// fails when specifying length
+		// known length
 		int seq_len = 0;
 		int cp      = utfz::decode(enc, enc + 1, seq_len);
-		assert(cp == utfz::replace && seq_len == 0);
+		assert(cp == 0 && seq_len == 1);
 
-		// fails if length is unspecified
-		cp = utfz::decode(enc);
-		assert(cp == utfz::replace);
+		// unknown length
+		seq_len = 0;
+		cp = utfz::decode(enc, seq_len);
+		assert(cp == 0 && seq_len == 1);
 
 		// test iterator without length
-		std::vector<int> iter1;
-		for (auto cp : utfz::cp(enc))
-			iter1.push_back(cp);
-		assert(iter1.size() == 0);
+		{
+			std::vector<int> iter;
+			for (auto cp : utfz::cp(enc))
+				iter.push_back(cp);
+			assert(iter.size() == 0);
+		}
 
 		// test iterator with length
-		std::vector<int> iter2;
-		for (auto cp : utfz::cp(enc, 1))
-			iter2.push_back(cp);
-		assert(iter1.size() == 0);
+		{
+			std::vector<int> iter;
+			for (auto cp : utfz::cp(enc, 1))
+				iter.push_back(cp);
+			assert(iter.size() == 1);
+		}
 	}
 
 	{
 		// encoding of NUL code point
-		char encoded[2];
-		assert(utfz::encode(encoded, 0) == 0);
+		char encoded[2] = {1, 1};
+		assert(utfz::encode(encoded, 0) == 1 && encoded[0] == 0);
 	}
 
 	{
@@ -264,6 +269,10 @@ int main(int argc, char** argv)
 		assert(!utfz::encode(ebuf, 0x10ffff + 1));
 
 		assert(utfz::restart(str + 1, str) == str);
+
+		// restart on null terminator
+		buf[0] = 0;
+		assert(utfz::restart(buf) == buf);
 
 		// legality of 3-byte codes
 		int slen = 0;

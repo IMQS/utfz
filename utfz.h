@@ -14,9 +14,6 @@ from 32-bit integer code points.
 When an error is detected, the library returns utfz::replace (U+FFFD), and attempts
 to restart parsing at the next legal code point.
 
-Note that U+0000 is considered an illegal code point by this library, and it is 
-replaced by U+FFFD when decoding.
-
 See more in the readme.
 
 */
@@ -56,7 +53,8 @@ int decode(const char* s, const char* end, int& seq_len);
 
 // A variant of decode where you do not know the length of the string.
 // This assumes the string is null terminated, and returns 'replace' if
-// a code point is truncated by a null terminator.
+// a code point is truncated by a null terminator. If the returned code
+// point is 0, then you have reached the end of the string.
 int decode(const char* s);
 int decode(const char* s, int& seq_len);
 
@@ -74,8 +72,7 @@ bool next(const char*& s, const char* end, int& cp);
 bool next(const char*& s, int& cp);
 
 // Encode the code point 'cp', into the buffer 'buf'.
-// Returns the encoded size (1..4), or 0 for an invalid code point, which includes
-// the case where cp = 0.
+// Returns the encoded size (1..4), or 0 for an invalid code point.
 int encode(char* buf, int cp);
 
 // Encode the code point 'cp', adding it to the string 's'.
@@ -110,8 +107,8 @@ public:
 
 		iter(const char* s, const char* end);
 
-		bool operator==(const iter& b) const { return S == b.S; }
-		bool operator!=(const iter& b) const { return S != b.S; }
+		bool  operator==(const iter& b) const { return S == b.S; }
+		bool  operator!=(const iter& b) const { return S != b.S; }
 		iter& operator++();
 		iter& operator++(int);
 

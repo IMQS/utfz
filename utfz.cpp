@@ -31,10 +31,6 @@ const int8_t seq_len_table[32] = {
 
 int seq_len(char c)
 {
-	// We do not allow the U+0000 code point
-	if (c == 0)
-		return invalid;
-
 	uint8_t high5 = ((uint8_t) c) >> 3;
 	return seq_len_table[high5];
 }
@@ -200,12 +196,7 @@ bool next(const char*& s, int& cp)
 int encode(char* buf, int cp)
 {
 	unsigned ucp = (unsigned) cp;
-	if (ucp == 0)
-	{
-		// we do not support encoding or decoding U+0000
-		return 0;
-	}
-	else if (ucp <= 0x7f)
+	if (ucp <= 0x7f)
 	{
 		buf[0] = ucp;
 		return 1;
