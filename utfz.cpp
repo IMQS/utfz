@@ -138,6 +138,8 @@ int decode(const char* s, int& _seq_len)
 	case 2:
 		if (s[1] == 0)
 			return replace;
+		if ((s[1] & 0x80) == 0)
+			return replace;
 		cp = ((s[0] & 0x1f) << 6) | (s[1] & 0x3f);
 		if (cp < min_cp_2)
 			return replace;
@@ -145,12 +147,16 @@ int decode(const char* s, int& _seq_len)
 	case 3:
 		if (s[1] == 0 || s[2] == 0)
 			return replace;
+		if ((s[1] & 0x80) == 0 || (s[2] & 0x80) == 0)
+			return replace;
 		cp = ((s[0] & 0xf) << 12) | ((s[1] & 0x3f) << 6) | (s[2] & 0x3f);
 		if (!is_legal_3_byte_code(cp))
 			return replace;
 		break;
 	case 4:
 		if (s[1] == 0 || s[2] == 0 || s[3] == 0)
+			return replace;
+		if ((s[1] & 0x80) == 0 || (s[2] & 0x80) == 0 || (s[3] & 0x80) == 0)
 			return replace;
 		cp = ((s[0] & 0x7) << 18) | ((s[1] & 0x3f) << 12) | ((s[2] & 0x3f) << 6) | (s[3] & 0x3f);
 		if (cp < min_cp_4 || cp > max4)
