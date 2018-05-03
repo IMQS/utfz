@@ -37,6 +37,10 @@ int seq_len(char c)
 
 const char* restart(const char* s)
 {
+	if (*s == 0)
+		return s;
+	// always increment one byte first, to ensure that we make progress through a series of invalid bytes
+	s++;
 	for (; *s != 0; s++)
 	{
 		if (seq_len(*s) != invalid)
@@ -49,6 +53,8 @@ const char* restart(const char* s, const char* end)
 {
 	if (s >= end)
 		return end;
+	// always increment one byte first, to ensure that we make progress through a series of invalid bytes
+	s++;
 	for (; s != end; s++)
 	{
 		if (seq_len(*s) != invalid)
@@ -97,16 +103,22 @@ int decode(const char* s, const char* end, int& _seq_len)
 		cp = s[0];
 		break;
 	case 2:
+		if ((s[1] & 0xc0) != 0x80)
+			return replace;
 		cp = ((s[0] & 0x1f) << 6) | (s[1] & 0x3f);
 		if (cp < min_cp_2)
 			return replace;
 		break;
 	case 3:
+		if ((s[1] & 0xc0) != 0x80 || (s[2] & 0xc0) != 0x80)
+			return replace;
 		cp = ((s[0] & 0xf) << 12) | ((s[1] & 0x3f) << 6) | (s[2] & 0x3f);
 		if (!is_legal_3_byte_code(cp))
 			return replace;
 		break;
 	case 4:
+		if ((s[1] & 0xc0) != 0x80 || (s[2] & 0xc0) != 0x80 || (s[3] & 0xc0) != 0x80)
+			return replace;
 		cp = ((s[0] & 0x7) << 18) | ((s[1] & 0x3f) << 12) | ((s[2] & 0x3f) << 6) | (s[3] & 0x3f);
 		if (cp < min_cp_4 || cp > max4)
 			return replace;
@@ -136,21 +148,21 @@ int decode(const char* s, int& _seq_len)
 		cp = s[0];
 		break;
 	case 2:
-		if (s[1] == 0)
+		if ((s[1] & 0xc0) != 0x80)
 			return replace;
 		cp = ((s[0] & 0x1f) << 6) | (s[1] & 0x3f);
 		if (cp < min_cp_2)
 			return replace;
 		break;
 	case 3:
-		if (s[1] == 0 || s[2] == 0)
+		if ((s[1] & 0xc0) != 0x80 || (s[2] & 0xc0) != 0x80)
 			return replace;
 		cp = ((s[0] & 0xf) << 12) | ((s[1] & 0x3f) << 6) | (s[2] & 0x3f);
 		if (!is_legal_3_byte_code(cp))
 			return replace;
 		break;
 	case 4:
-		if (s[1] == 0 || s[2] == 0 || s[3] == 0)
+		if ((s[1] & 0xc0) != 0x80 || (s[2] & 0xc0) != 0x80 || (s[3] & 0xc0) != 0x80)
 			return replace;
 		cp = ((s[0] & 0x7) << 18) | ((s[1] & 0x3f) << 12) | ((s[2] & 0x3f) << 6) | (s[3] & 0x3f);
 		if (cp < min_cp_4 || cp > max4)

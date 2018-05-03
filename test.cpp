@@ -104,7 +104,7 @@ void bench(const char* name, int runLength[4])
 
 	int    sum   = 0;
 	double start = clock();
-	for (int i = 0; i < 1000; i++)
+	for (int i = 0; i < 2000; i++)
 	{
 		for (auto cp : utfz::cp(enc, encEnd - enc))
 			sum += cp;
@@ -281,9 +281,7 @@ int main(int argc, char** argv)
 		// legality of 3-byte codes
 		int slen = 0;
 		// overlong
-		assert(utfz::decode("\xE0"
-		                    "\x01"
-		                    "\x01") == utfz::replace);
+		assert(utfz::decode("\xE0\x01\x01") == utfz::replace);
 		// UTF-16 surrogate pairs
 		for (int i = 0xd800; i <= 0xdfff; i++)
 		{
@@ -307,6 +305,27 @@ int main(int argc, char** argv)
 		assert(encode_any(0x10ffff + 1, buf) == 4);
 		assert(utfz::decode(buf) == utfz::replace);
 		assert(utfz::decode(buf, buf + 4) == utfz::replace);
+
+		// highest two bits in subsequent bytes are not '10'; next plausible decode point is one byte onwards
+		const char* badHigh[6] = {
+		    // bit 7 is not 1 (3F is the illegal byte here)
+		    "\xC4\x3F",
+		    "\xE4\xB0\x3F",
+		    "\xF4\xB0\xB0\x3F",
+		    // bit 6 is not 0 (F0 is the illegal byte here)
+		    "\xC4\xF0",
+		    "\xE4\xB0\xF0",
+		    "\xF4\xB0\xB0\xF0",
+		};
+		for (int i = 0; i < 6; i++)
+		{
+			const char* s   = badHigh[i];
+			const char* end = s + strlen(s);
+			assert(utfz::decode(s, slen) == utfz::replace);
+			assert(utfz::decode(s, end, slen) == utfz::replace);
+			assert(utfz::restart(s) > s);
+			assert(utfz::restart(s, end) > s);
+		}
 
 		// illegal encoding
 		assert(utfz::encode(buf, 0xfffe) == 0);

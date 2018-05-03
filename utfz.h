@@ -33,16 +33,17 @@ enum limits
 	max4 = 0x10ffff, // maximum code point that can be represented by four bytes
 };
 
-// Returns the sequence length (1,2,3,4) or 'invalid' if not a valid leading byte,
-// which includes the case where c = 0.
+// Returns the sequence length (1,2,3,4) or 'invalid' if not a valid leading byte
 int seq_len(char c);
 
-// Move forward, returning the position of the next plausible start character
+// Move forward by at least one byte, returning the position of the next plausible
+// start byte.
 // If a zero byte is found, then the position of that byte is returned.
 // If 's' is on a zero byte when restart is called, then 's' is returned.
 const char* restart(const char* s);
 
-// Move forward, returning the position of the next plausible start character
+// Move forward by at least one byte, returning the position of the next plausible
+// start byte.
 // If the end of the buffer is reached, then 'end' is returned.
 const char* restart(const char* s, const char* end);
 
