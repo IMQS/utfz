@@ -125,4 +125,4 @@ public:
 	iter cbegin() const { return iter(Str, End); }
 	iter cend() const { return iter(End, End); }
 };
-}
+} // namespace utfz

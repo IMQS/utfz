@@ -9,8 +9,12 @@
 
 /*
 
+Windows:
 cl /nologo /Zi /EHsc test.cpp utfz.cpp && test
 opencppcoverage --sources c:\dev\head\maps\third_party\utfz --modules test.exe -- test.exe
+
+Unix:
+g++ -O2 -o test -std=c++11 test.cpp utfz.cpp && ./test
 
 
 */
@@ -100,7 +104,7 @@ void bench(const char* name, int runLength[4])
 
 	int    sum   = 0;
 	double start = clock();
-	for (int i = 0; i < 5000; i++)
+	for (int i = 0; i < 1000; i++)
 	{
 		for (auto cp : utfz::cp(enc, encEnd - enc))
 			sum += cp;
@@ -149,9 +153,9 @@ int encode_any(int cp, char* buf)
 
 int main(int argc, char** argv)
 {
-	const char* s1        = "$";  // 1 byte
-	const char* s2        = "¢";  // 2 bytes
-	const char* s3        = "€";  // 3 bytes
+	const char* s1        = "$"; // 1 byte
+	const char* s2        = "¢"; // 2 bytes
+	const char* s3        = "€"; // 3 bytes
 	const char* s4        = "𐍈"; // 4 bytes
 	const char* sinvalid1 = "\x80";
 	const char* sinvalid2 =
@@ -203,7 +207,7 @@ int main(int argc, char** argv)
 
 		// unknown length
 		seq_len = 0;
-		cp = utfz::decode(enc, seq_len);
+		cp      = utfz::decode(enc, seq_len);
 		assert(cp == 0 && seq_len == 1);
 
 		// test iterator without length
@@ -326,13 +330,13 @@ int main(int argc, char** argv)
 
 		// iterate on empty string
 		const char* empty = "";
-		auto iter = utfz::cp(empty).begin();
-		auto end = utfz::cp(empty).end();
+		auto        iter  = utfz::cp(empty).begin();
+		auto        end   = utfz::cp(empty).end();
 		iter++;
 		iter++;
 		assert(iter == end);
 		iter = utfz::cp(empty, 0).begin();
-		end = utfz::cp(empty, 0).end();
+		end  = utfz::cp(empty, 0).end();
 		iter++;
 		iter++;
 		assert(iter == end);
@@ -340,7 +344,7 @@ int main(int argc, char** argv)
 		// iterate on truncated string (known length)
 		assert(encode_any(utfz::max3 + 1, buf) == 4);
 		iter = utfz::cp(buf, 3).begin();
-		end = utfz::cp(buf, 3).end();
+		end  = utfz::cp(buf, 3).end();
 		assert(iter != end);
 		assert(*iter == utfz::replace);
 		iter++;
@@ -349,8 +353,8 @@ int main(int argc, char** argv)
 		// iterate on truncated string (unknown length)
 		assert(encode_any(utfz::max3 + 1, buf) == 4);
 		buf[3] = 0;
-		iter = utfz::cp(buf).begin();
-		end = utfz::cp(buf).end();
+		iter   = utfz::cp(buf).begin();
+		end    = utfz::cp(buf).end();
 		assert(iter != end);
 		assert(*iter == utfz::replace);
 		iter++;

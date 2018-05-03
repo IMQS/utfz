@@ -360,4 +360,4 @@ bool cp::iter::known_end() const
 {
 	return End != nullptr;
 }
-}
+} // namespace utfz
