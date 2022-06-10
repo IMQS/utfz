@@ -9,12 +9,15 @@
 
 /*
 
-Windows:
+Windows MSVC:
 cl /nologo /Zi /EHsc test.cpp utfz.cpp && test
 opencppcoverage --sources c:\dev\head\maps\third_party\utfz --modules test.exe -- test.exe
 
-Unix:
+Unix GCC:
 g++ -O2 -o test -std=c++11 test.cpp utfz.cpp && ./test
+
+Unix Clang:
+clang++ -O2 -o test -std=c++11 test.cpp utfz.cpp && ./test
 
 
 */
